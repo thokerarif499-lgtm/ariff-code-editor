@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariff IDE Pro</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+margin:0;
+font-family:monospace;
+background:#0c0c0c;
+color:white;
+height:100vh;
+overflow:hidden;
+}
+
+.container{
+display:flex;
+height:100vh;
+}
+
+/* ===== EDITOR ===== */
+
+.editor{
+width:45%;
+display:flex;
+flex-direction:column;
+background:#161616;
+border-right:2px solid #00ff88;
+}
+
+.editor-header{
+padding:10px;
+border-bottom:1px solid #222;
+display:flex;
+flex-direction:column;
+gap:8px;
+}
+
+.top-row{
+display:flex;
+gap:8px;
+flex-wrap:wrap;
+align-items:center;
+}
+
+.tabs{
+display:flex;
+gap:5px;
+}
+
+.tab{
+padding:5px 10px;
+border:1px solid #00ff88;
+cursor:pointer;
+color:white;
+}
+
+.active-tab{
+background:#00ff88;
+color:black;
+}
+
+.editor-body{
+flex:1;
+display:flex;
+}
+
+textarea{
+flex:1;
+width:100%;
+border:none;
+outline:none;
+resize:none;
+padding:10px;
+background:#111;
+color:#00ff88;
+font-size:14px;
+line-height:1.4;
+}
+
+.status-bar{
+background:#111;
+padding:5px 10px;
+font-size:12px;
+display:flex;
+justify-content:space-between;
+border-top:1px solid #222;
+}
+
+/* ===== BUTTONS ===== */
+
+button{
+padding:5px 10px;
+border:1px solid #00ff88;
+background:transparent;
+color:#00ff88;
+cursor:pointer;
+transition:0.3s;
+}
+
+button:hover{
+background:#00ff88;
+color:black;
+}
+
+/* ===== PREVIEW ===== */
+
+.preview{
+flex:1;
+display:flex;
+flex-direction:column;
+background:white;
+color:black;
+}
+
+.preview-header{
+padding:10px;
+background:#eee;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+iframe{
+flex:1;
+border:none;
+}
+
+.console{
+height:140px;
+background:black;
+color:#00ff88;
+overflow:auto;
+font-size:12px;
+padding:5px;
+}
+
+.divider{
+width:6px;
+background:#00ff88;
+cursor:col-resize;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="editor">
+<div class="editor-header">
+
+<div class="top-row">
+<button onclick="downloadCode()">Download</button>
+<button onclick="createProject()">New</button>
+<button onclick="deleteProject()">Delete</button>
+<button onclick="runCode()">Run</button>
+<label>
+<input type="checkbox" id="autoRunToggle"> Auto Run
+</label>
+<span id="saveStatus">Saved</span>
+</div>
+
+<div>
+Project: <span id="currentProject"></span>
+<select id="projectList" onchange="switchProject()"></select>
+</div>
+
+<div class="tabs">
+<div class="tab active-tab" onclick="switchTab('html')" id="tab-html">HTML</div>
+<div class="tab" onclick="switchTab('css')" id="tab-css">CSS</div>
+<div class="tab" onclick="switchTab('js')" id="tab-js">JS</div>
+</div>
+
+</div>
+
+<div class="editor-body">
+<textarea id="editor"></textarea>
+</div>
+
+<div class="status-bar">
+<span id="lineCount">Lines: 1</span>
+<span id="activeInfo">HTML</span>
+</div>
+
+</div>
+
+<div class="divider"></div>
+
+<div class="preview">
+<div class="preview-header">
+<span>Preview</span>
+<button onclick="clearConsole()">Clear Console</button>
+</div>
+<iframe id="previewFrame"></iframe>
+<div class="console" id="console"></div>
+</div>
+
+</div>
+
+<script>
+
+let projects = JSON.parse(localStorage.getItem("projects")) || {};
+let currentProject = null;
+let currentTab = "html";
+let autoRun = false;
+
+const editor = document.getElementById("editor");
+const saveStatus = document.getElementById("saveStatus");
+const lineCount = document.getElementById("lineCount");
+
+function saveProjects(){
+localStorage.setItem("projects", JSON.stringify(projects));
+saveStatus.innerText="Saved";
+}
+
+function markUnsaved(){
+saveStatus.innerText="Unsaved...";
+}
+
+function initProjects(){
+if(Object.keys(projects).length===0){
+projects["Default"]={
+html:"<h1>Welcome 🚀</h1>",
+css:"body{font-family:sans-serif;}",
+js:"console.log('Ready');"
+};
+saveProjects();
+}
+populateProjectList();
+currentProject=Object.keys(projects)[0];
+loadProject();
+}
+
+function populateProjectList(){
+let select=document.getElementById("projectList");
+select.innerHTML="";
+Object.keys(projects).forEach(p=>{
+let opt=document.createElement("option");
+opt.value=p;
+opt.innerText=p;
+select.appendChild(opt);
+});
+}
+
+function createProject(){
+let name=prompt("Project name?");
+if(!name) return;
+projects[name]={html:"",css:"",js:""};
+saveProjects();
+populateProjectList();
+}
+
+function deleteProject(){
+if(confirm("Delete project?")){
+delete projects[currentProject];
+saveProjects();
+initProjects();
+}
+}
+
+function switchProject(){
+saveCurrent();
+currentProject=document.getElementById("projectList").value;
+loadProject();
+}
+
+function loadProject(){
+document.getElementById("currentProject").innerText=currentProject;
+editor.value=projects[currentProject][currentTab];
+updateLineCount();
+runCode();
+}
+
+function saveCurrent(){
+projects[currentProject][currentTab]=editor.value;
+saveProjects();
+}
+
+function switchTab(tab){
+saveCurrent();
+currentTab=tab;
+document.getElementById("activeInfo").innerText=tab.toUpperCase();
+editor.value=projects[currentProject][tab];
+document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active-tab"));
+document.getElementById("tab-"+tab).classList.add("active-tab");
+updateLineCount();
+}
+
+editor.addEventListener("input",()=>{
+markUnsaved();
+updateLineCount();
+if(document.getElementById("autoRunToggle").checked){
+runCode();
+}
+});
+
+editor.addEventListener("keydown",(e)=>{
+if(e.ctrlKey && e.key==="Enter"){
+runCode();
+}
+});
+
+function updateLineCount(){
+let lines=editor.value.split("\\n").length;
+lineCount.innerText="Lines: "+lines;
+}
+
+function runCode(){
+saveCurrent();
+let p=projects[currentProject];
+
+let combined=`
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>${p.css}</style>
+</head>
+<body>
+${p.html}
+<script>
+(function(){
+var oldLog=console.log;
+console.log=function(){
+parent.postMessage({type:'log',msg:Array.from(arguments).join(" ")},'*');
+oldLog.apply(console,arguments);
+};
+window.onerror=function(msg){
+parent.postMessage({type:'error',msg:msg},'*');
+};
+})();
+${p.js}
+<\/script>
+</body>
+</html>
+`;
+
+document.getElementById("previewFrame").srcdoc=combined;
+}
+
+window.addEventListener("message",function(e){
+let c=document.getElementById("console");
+if(e.data.type==="log"){
+c.innerHTML+="<div>> "+e.data.msg+"</div>";
+}
+if(e.data.type==="error"){
+c.innerHTML+="<div style='color:red'>ERROR: "+e.data.msg+"</div>";
+}
+c.scrollTop=c.scrollHeight;
+});
+
+function clearConsole(){
+document.getElementById("console").innerHTML="";
+}
+
+function downloadCode(){
+saveCurrent();
+let p=projects[currentProject];
+let fullCode=`
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>${p.css}</style>
+</head>
+<body>
+${p.html}
+<script>${p.js}<\/script>
+</body>
+</html>
+`;
+let blob=new Blob([fullCode],{type:"text/html"});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download=currentProject+".html";
+a.click();
+}
+
+window.onload=initProjects;
+
+</script>
+
+</body>
+</html>
